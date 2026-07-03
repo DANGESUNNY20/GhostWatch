@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TECHNOVA Command Center — SOC Log Analysis</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg-primary: #020202; --bg-secondary: #0a0a0a; --bg-card: #050505; --bg-card-hover: #111111;
+    --border: #004400; --text-primary: #00ff41; --text-secondary: #00aa22; --text-muted: #005511;
+    --accent: #00ff41; --accent-glow: rgba(0, 255, 65, 0.5); --danger: #ff003c; --warning: #ffb300; --info: #00f0ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: var(--bg-primary); color: var(--text-primary); font-family: 'JetBrains Mono', monospace; text-shadow: 0 0 3px var(--accent-glow); }
+  body::before { content: " "; display: block; position: fixed; inset: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); z-index: 999; background-size: 100% 2px, 3px 100%; pointer-events: none; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; } ::-webkit-scrollbar-track { background: var(--bg-secondary); } ::-webkit-scrollbar-thumb { background: var(--border); }
+  .card { background: var(--bg-card); border: 1px solid var(--border); display: flex; flex-direction: column; }
+  .live-dot { width: 10px; height: 10px; background: var(--danger); border-radius: 50%; animation: livePulse 1s infinite; box-shadow: 0 0 10px var(--danger); }
+  @keyframes livePulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.2; } }
+  .filter-btn { padding: 5px 12px; border: 1px solid var(--border); background: transparent; color: var(--text-secondary); font-size: 12px; cursor: pointer; }
+  .filter-btn.active { border-color: var(--accent); color: var(--bg-primary); background: var(--accent); }
+  .pkt-table { width: 100%; border-collapse: collapse; }
+  .pkt-table th { position: sticky; top: 0; background: var(--bg-card); padding: 10px; text-align: left; font-size: 12px; color: var(--accent); border-bottom: 1px solid var(--accent); }
+  .pkt-table td { padding: 8px 10px; font-size: 12px; border-bottom: 1px dashed var(--border); white-space: nowrap; }
+  .badge { padding: 2px 6px; font-size: 10px; border: 1px solid; text-transform: uppercase; }
+  .badge-err { border-color: var(--danger); color: var(--danger); }
+  .badge-warn { border-color: var(--warning); color: var(--warning); }
+  .badge-ssh { border-color: var(--info); color: var(--info); }
+  .badge-sudo { border-color: var(--accent); color: var(--bg-primary); background: var(--accent); }
+  .badge-alert { border-color: var(--danger); background: var(--danger); color: #fff; font-weight: bold; }
+</style>
+</head>
+<body>
+<div style="position:relative; z-index:1; min-height:100vh; display:flex; flex-direction:column;">
+  <header style="border-bottom: 1px solid var(--accent); background: #000; padding: 16px 24px;">
+    <div style="display: flex; align-items: center; justify-content: space-between;">
+      <div>
+        <h1 style="font-size: 20px; font-weight: 700;">TECHNOVA // SOC Command Center</h1>
+        <p style="font-size: 12px; color: var(--text-secondary);">Enterprise Linux Log Collection & Brute Force Detection</p>
+      </div>
+      <div style="display: flex; gap: 16px; align-items: center;">
+        <span style="font-size: 12px; color: var(--text-secondary);">Admin: Sunny Dange</span>
+        <div style="display: flex; align-items: center; gap: 8px; border: 1px solid var(--danger); padding: 4px 12px; background: rgba(255,0,60,0.1);">
+          <div class="live-dot"></div>
+          <span style="font-size: 12px; color: var(--danger);">LIVE CAPTURE ACTIVE</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main style="padding: 20px 24px; flex: 1; display: flex; flex-direction: column; gap: 20px;">
+    <section style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;">
+      <div class="card" style="padding: 16px 20px;">
+        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">AUTH FAILURES</div>
+        <div id="statFailedAuth" style="font-size: 32px; color: var(--danger);">0</div>
+      </div>
+      <div class="card" style="padding: 16px 20px;">
+        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">SUDO ESCALATIONS</div>
+        <div id="statSudo" style="font-size: 32px; color: var(--accent);">0</div>
+      </div>
+      <div class="card" style="padding: 16px 20px;">
+        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">SSH EVENTS</div>
+        <div id="statSsh" style="font-size: 32px; color: var(--info);">0</div>
+      </div>
+      <div class="card" style="padding: 16px 20px;">
+        <div style="color: var(--text-secondary); font-size: 12px; margin-bottom: 8px;">BRUTE FORCE ALERTS</div>
+        <div id="statAlerts" style="font-size: 32px; color: var(--warning);">0</div>
+      </div>
+    </section>
+
+    <section class="card" style="padding: 20px; height: 550px;">
+      <div style="display: flex; justify-content: space-between; margin-bottom: 16px;">
+        <h2 style="font-size: 16px;">>_ LIVE LOG STREAM</h2>
+        <div style="display: flex; gap: 8px;" id="filterBar">
+          <button class="filter-btn active" onclick="setLogFilter('ALL', this)">ALL</button>
+          <button class="filter-btn" onclick="setLogFilter('ERROR', this)">ERROR</button>
+          <button class="filter-btn" onclick="setLogFilter('SSH', this)">SSH</button>
+          <button class="filter-btn" onclick="setLogFilter('SUDO', this)">SUDO</button>
+          <button class="filter-btn" onclick="setLogFilter('ALERT', this)">ALERTS</button>
+        </div>
+      </div>
+      <div style="flex: 1; overflow-y: auto; border: 1px solid var(--border);" id="scrollContainer">
+        <table class="pkt-table">
+          <thead>
+            <tr>
+              <th style="width: 180px;">TIMESTAMP</th>
+              <th style="width: 100px;">TYPE</th>
+              <th>LOG MESSAGE</th>
+            </tr>
+          </thead>
+          <tbody id="logFeed"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+let logs = [];
+let activeFilter = 'ALL';
+
+function setLogFilter(type, btn) {
+  activeFilter = type;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderLogs();
+}
+
+function renderLogs() {
+  const tbody = document.getElementById('logFeed');
+  tbody.innerHTML = '';
+  
+  let failedAuthCount = 0;
+  let sudoCount = 0;
+  let sshCount = 0;
+  let alertCount = 0;
+
+  logs.forEach(log => {
+    // Tally stats based on the real logs
+    if (log.type === 'AUTH' && log.message.includes('Failed')) failedAuthCount++;
+    if (log.type === 'SUDO') sudoCount++;
+    if (log.type === 'SSH') sshCount++;
+    if (log.type === 'ALERT') alertCount++;
+
+    // Apply Filter
+    if (activeFilter !== 'ALL' && log.type !== activeFilter) return;
+
+    const tr = document.createElement('tr');
+    let badgeClass = 'badge-ssh';
+    if(log.type === 'ERROR') badgeClass = 'badge-err';
+    if(log.type === 'SUDO') badgeClass = 'badge-sudo';
+    if(log.type === 'WARNING') badgeClass = 'badge-warn';
+    if(log.type === 'ALERT') badgeClass = 'badge-alert';
+
+    tr.innerHTML = `
+      <td>${log.timestamp}</td>
+      <td><span class="badge ${badgeClass}">${log.type}</span></td>
+      <td style="color: ${log.type==='ERROR' || log.type==='ALERT' ? 'var(--danger)' : 'var(--text-primary)'}">${log.message}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  document.getElementById('statFailedAuth').innerText = failedAuthCount;
+  document.getElementById('statSudo').innerText = sudoCount;
+  document.getElementById('statSsh').innerText = sshCount;
+  document.getElementById('statAlerts').innerText = alertCount;
+  
+  const container = document.getElementById('scrollContainer');
+  container.scrollTop = container.scrollHeight;
+}
+
+// Fetch real data from the Python Backend every 2 seconds
+setInterval(() => {
+  fetch('/api/logs')
+    .then(response => response.json())
+    .then(data => {
+      logs = data;
+      renderLogs();
+    })
+    .catch(error => console.error('Error fetching logs:', error));
+}, 2000);
+</script>
+</body>
+</html>
+              
