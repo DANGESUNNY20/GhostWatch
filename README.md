@@ -73,3 +73,25 @@ It tracks critical authentication events, identifies potential brute-force attac
 ```bash
 git clone [https://github.com/yourusername/technova-soc-dashboard.git](https://github.com/yourusername/technova-soc-dashboard.git)
 cd technova-soc-dashboard
+## ⚙️ Installation & Deployment
+
+**1. Clone the repository**
+
+git clone https://github.com/yourusername/technova-soc-dashboard.git
+cd technova-soc-dashboard
+
+**2. Create the Dependency File**
+Ensure you have a `requirements.txt` file in your root directory containing:
+
+Flask>=2.0.0
+
+
+**3. Run the Automated Startup Script**
+We have included a wrapper script that automatically builds the virtual environment, installs dependencies, grants file permissions, and launches the server.
+
+chmod +x start_technova.sh
+./start_technova.sh
+
+
+**4. Access the Dashboard**
+Navigate to `http://127.0.0.1:5000` in your web browser.
