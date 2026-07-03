@@ -55,13 +55,7 @@ It tracks critical authentication events, identifies potential brute-force attac
 
 ## 📸 Interface Sneak Peek
 
-> **Note to Recruiters/Viewers:** Replace this section with a GIF or screenshot of your working dashboard!
-> 
-> ## 📸 Interface Sneak Peek
-
 ![TECHNOVA Dashboard Demo](Technova_panel)
-
----
 
 ---
 
